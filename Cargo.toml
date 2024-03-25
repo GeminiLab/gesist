@@ -1,0 +1,24 @@
+workspace = { members = ["bin/gesist-bin"] }
+[package]
+name = "gesist"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[[examples]]
+name = "encode-interactive"
+
+[[bench]]
+name = "mix"
+harness = false
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+rand = "0.8"
+dialoguer = "0.11"
+
+[dependencies]
+base64 = "0.22.0"
+crc = "3.0.1"
+leb128 = "0.2.5"
