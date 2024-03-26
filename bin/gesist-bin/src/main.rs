@@ -27,7 +27,6 @@ struct MainActions {
 fn main() {
     let args = GesistCli::parse();
 
-
     match (args.main.encode, args.main.decode) {
         (true, false) => encode_once(args.file),
         (false, true) => decode_once(args.file),
@@ -48,7 +47,7 @@ fn exit_on_base64_error(error: base64::DecodeError) -> ! {
 }
 
 fn exit_on_decode_error(error: PaddingValidationError) -> ! {
-    GesistCli::command().error(ErrorKind::InvalidValue, format!("Decode Error: {:?}", error)).exit()
+    GesistCli::command().error(ErrorKind::InvalidValue, format!("Decode Error: {:?}, it's likely that the input is corrupted.", error)).exit()
 }
 
 fn read_all_from_file_or_stdin(file: Option<String>) -> Vec<u8> {

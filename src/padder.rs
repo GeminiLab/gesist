@@ -1,5 +1,7 @@
 use std::ops::{Deref, DerefMut};
 use std::borrow::Borrow;
+use std::error::Error;
+use std::fmt::{Debug, Display, Formatter};
 use std::io::Cursor;
 use crc::{Crc, CRC_8_SAE_J1850};
 
@@ -48,13 +50,33 @@ pub struct PadderMutGuard<'a> {
     padder: &'a mut Padder,
 }
 
-#[derive(Debug)]
+#[derive(Clone)]
 pub enum PaddingValidationError {
-    NotAligned,
+    NotAligned { length: usize },
     BadLengthField,
-    UnexpectedPaddedLength,
-    InvalidChecksum,
+    UnexpectedPaddedLength { payload_size: usize, expected: usize, actual: usize },
+    InvalidChecksum { offset: usize },
 }
+
+impl Debug for PaddingValidationError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PaddingValidationError::NotAligned { length } => write!(f, "Length {} is not aligned", length),
+            PaddingValidationError::BadLengthField => write!(f, "Bad length field"),
+            PaddingValidationError::UnexpectedPaddedLength { payload_size, expected, actual } =>
+                write!(f, "Unexpected padded length for payload size {}, {} expected, {} actual", payload_size, expected, actual),
+            PaddingValidationError::InvalidChecksum { offset } => write!(f, "Invalid checksum at offset {}", offset),
+        }
+    }
+}
+
+impl Display for PaddingValidationError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        <Self as Debug>::fmt(&self, f)
+    }
+}
+
+impl Error for PaddingValidationError {}
 
 /// Constants and const functions for the `Padder` struct.
 impl Padder {
@@ -215,29 +237,30 @@ impl Padder {
         let len = content.len();
 
         if len % Self::ALIGNMENT != 0 {
-            return Err(PaddingValidationError::NotAligned);
+            return Err(PaddingValidationError::NotAligned { length: len });
         }
 
         let mut cursor = Cursor::new(content.as_ref());
-        let size = leb128::read::unsigned(&mut cursor).map_err(|_| PaddingValidationError::BadLengthField)? as usize;
+        let payload_size = leb128::read::unsigned(&mut cursor).map_err(|_| PaddingValidationError::BadLengthField)? as usize;
         let leb128_size = cursor.position() as usize;
 
-        if Self::padded_size(size) != len {
-            return Err(PaddingValidationError::UnexpectedPaddedLength);
+        let expected_padded_size = Self::padded_size(payload_size);
+        if expected_padded_size != len {
+            return Err(PaddingValidationError::UnexpectedPaddedLength { payload_size, expected: expected_padded_size, actual: len });
         }
 
-        let checksum_size = len - size - leb128_size;
-        let expected_checksum = Self::CRC.checksum(&content[leb128_size..leb128_size + size]);
+        let checksum_size = len - payload_size - leb128_size;
+        let expected_checksum = Self::CRC.checksum(&content[leb128_size..leb128_size + payload_size]);
         for i in 0..checksum_size {
             let expected = expected_checksum.wrapping_add(i as u8);
-            if content[leb128_size + size + i] != expected {
-                return Err(PaddingValidationError::InvalidChecksum);
+            if content[leb128_size + payload_size + i] != expected {
+                return Err(PaddingValidationError::InvalidChecksum { offset: leb128_size + payload_size + i });
             }
         }
 
         Ok(Self {
             leb128_size,
-            size,
+            size: payload_size,
             content,
         })
     }

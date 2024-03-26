@@ -32,7 +32,9 @@ pub fn encode_to_base64<T: AsRef<[u8]>>(input: T) -> String {
 }
 
 fn do_decode(place: impl Into<Box<[u8]>>) -> Result<Padder, PaddingValidationError> {
-    let mut mix = Mixer::new(place).ok_or(PaddingValidationError::NotAligned)?;
+    let place = place.into();
+    let len = place.len();
+    let mut mix = Mixer::new(place).ok_or(PaddingValidationError::NotAligned { length: len })?;
     mix.mix();
 
     Padder::try_from_raw(mix)
